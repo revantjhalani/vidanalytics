@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analytics Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4caf50;
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .upload-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .upload-area {
+            border: 2px dashed #4ecdc4;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            background: rgba(78, 205, 196, 0.05);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-area.dragover {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.15);
+            transform: scale(1.05);
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .upload-text h3 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+
+        .upload-text p {
+            color: #b0b0b0;
+            font-size: 0.9rem;
+        }
+
+        .upload-controls {
+            margin-top: 20px;
+        }
+
+        .file-info {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #00ff88, #00cc6a);
+            color: #000;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .progress-bar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            height: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            background: linear-gradient(45deg, #00ff88, #4ecdc4);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 15px;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+
+        .video-placeholder {
+            width: 100%;
+            height: 400px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+        }
+
+        .placeholder-content {
+            text-align: center;
+            color: #b0b0b0;
+        }
+
+        .placeholder-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .placeholder-content h3 {
+            margin-bottom: 10px;
+            color: #4ecdc4;
+        }
+
+        .video-section {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .video-feed {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .person-box {
+            position: absolute;
+            border: 3px solid #00ff88;
+            border-radius: 8px;
+            background: rgba(0, 255, 136, 0.1);
+            backdrop-filter: blur(2px);
+            transition: all 0.2s ease-out;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .person-box:hover {
+            background: rgba(0, 255, 136, 0.2);
+            transform: scale(1.02);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .person-info {
+            position: absolute;
+            top: -35px;
+            left: 0;
+            background: linear-gradient(45deg, #00ff88, #00cc6a);
+            color: #000;
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+            white-space: nowrap;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .group-indicator {
+            border-color: #ff6b6b !important;
+            background: rgba(255, 107, 107, 0.15) !important;
+        }
+
+        .group-indicator .person-info {
+            background: linear-gradient(45deg, #ff6b6b, #ff5722);
+            color: white;
+        }
+
+        .stats-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: fit-content;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-card h3 {
+            font-size: 0.9rem;
+            color: #b0b0b0;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #00ff88;
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+        }
+
+        .stat-subtext {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 5px;
+        }
+
+        .mini-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .mini-stat {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mini-stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+
+        .mini-stat-label {
+            font-size: 0.8rem;
+            color: #b0b0b0;
+            margin-top: 5px;
+        }
+
+        .activity-feed {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 3px solid #4ecdc4;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .activity-icon {
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(45deg, #4ecdc4, #45b7d1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .activity-text {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .activity-time {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connected {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4caf50;
+            color: #4caf50;
+        }
+
+        .disconnected {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            color: #f44336;
+        }
+
+        .reconnecting {
+            background: rgba(255, 193, 7, 0.2);
+            border: 1px solid #ffc107;
+            color: #ffc107;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-panel {
+                order: -1;
+            }
+            
+            .mini-stats {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .mini-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Scrollbar Styling */
+        .activity-feed::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .activity-feed::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .activity-feed::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+
+        .activity-feed::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎥 Video Analytics Dashboard</h1>
+            <div class="status">
+                <div class="status-dot"></div>
+                <span>Live Analysis Active</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Video Upload Section -->
+            <div class="upload-section">
+                <h2 style="margin-bottom: 20px; color: #4ecdc4;">📁 Upload Video</h2>
+                <div class="upload-container">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📹</div>
+                        <div class="upload-text">
+                            <h3>Drop video file here or click to browse</h3>
+                            <p>Supports MP4, AVI, MOV files (max 100MB)</p>
+                        </div>
+                        <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+                    </div>
+                    <div class="upload-controls" id="uploadControls" style="display: none;">
+                        <div class="file-info" id="fileInfo"></div>
+                        <div class="control-buttons">
+                            <button id="processBtn" class="btn btn-primary">🚀 Process Video</button>
+                            <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
+                        </div>
+                        <div class="progress-bar" id="progressBar" style="display: none;">
+                            <div class="progress-fill" id="progressFill"></div>
+                            <div class="progress-text" id="progressText">0%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="video-section">
+                <h2 style="margin-bottom: 20px; color: #4ecdc4;">📹 Video Analysis</h2>
+                <div class="video-container">
+                    <div id="videoPlaceholder" class="video-placeholder">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">🎬</div>
+                            <h3>Upload a video to start analysis</h3>
+                            <p>Real-time person detection and analytics</p>
+                        </div>
+                    </div>
+                    <canvas id="videoCanvas" class="video-feed" style="display: none;"></canvas>
+                    <div id="overlay" class="overlay"></div>
+                </div>
+            </div>
+
+            <div class="stats-panel">
+                <h2 style="margin-bottom: 20px; color: #4ecdc4;">📊 Real-time Analytics</h2>
+                
+                <div class="stat-card">
+                    <h3>👥 Current People</h3>
+                    <div id="currentPeople" class="stat-value">0</div>
+                    <div class="stat-subtext">Active detections</div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>🔢 Total Unique Visitors</h3>
+                    <div id="uniquePeople" class="stat-value">0</div>
+                    <div class="stat-subtext">Since start</div>
+                </div>
+
+                <div class="stat-card">
+                    <h3>👫 Groups Detected</h3>
+                    <div id="groupsCount" class="stat-value">0</div>
+                    <div class="stat-subtext">People in proximity</div>
+                </div>
+
+                <div class="mini-stats">
+                    <div class="mini-stat">
+                        <div id="fps" class="mini-stat-value">0</div>
+                        <div class="mini-stat-label">FPS</div>
+                    </div>
+                    <div class="mini-stat">
+                        <div id="uptime" class="mini-stat-value">0s</div>
+                        <div class="mini-stat-label">Uptime</div>
+                    </div>
+                    <div class="mini-stat">
+                        <div id="totalFrames" class="mini-stat-value">0</div>
+                        <div class="mini-stat-label">Frames</div>
+                    </div>
+                    <div class="mini-stat">
+                        <div id="avgConfidence" class="mini-stat-value">0%</div>
+                        <div class="mini-stat-label">Avg Conf</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-feed">
+            <h2 style="margin-bottom: 20px; color: #4ecdc4;">📋 Activity Log</h2>
+            <div id="activityLog">
+                <div class="activity-item">
+                    <div class="activity-icon">🚀</div>
+                    <div class="activity-text">System initialized and ready</div>
+                    <div class="activity-time">Now</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="connectionStatus" class="connection-status disconnected">
+        🔴 Connecting...
+    </div>
+
+    <script>
+        class VideoAnalyticsDashboard {
+            constructor() {
+                this.ws = null;
+                this.isConnected = false;
+                this.frameData = null;
+                this.activityLog = [];
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.uploadedFile = null;
+                this.isProcessing = false;
+                this.canvas = null;
+                this.ctx = null;
+                
+                this.setupEventListeners();
+                this.initCanvas();
+            }
+
+            initCanvas() {
+                this.canvas = document.getElementById('videoCanvas');
+                this.ctx = this.canvas.getContext('2d');
+            }
+
+            initWebSocket() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/process`;
+                
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    this.isConnected = true;
+                    this.reconnectAttempts = 0;
+                    this.updateConnectionStatus('connected');
+                    this.addActivity('🟢 Connected to processing service', 'success');
+                };
+                
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log('Received WebSocket message:', data.type, data);
+                    
+                    if (data.type === 'frame') {
+                        console.log('Displaying frame with', data.people.length, 'people');
+                        this.displayFrame(data.frame, data.people, data.frame_dimensions);
+                        this.updateStats(data.stats);
+                    } else if (data.type === 'progress') {
+                        console.log('Progress update:', data.progress + '%');
+                        this.updateProgress(data.progress, data.current_frame, data.total_frames);
+                    } else if (data.type === 'complete') {
+                        console.log('Processing completed');
+                        this.onProcessingComplete();
+                    } else if (data.type === 'error') {
+                        console.error('Processing error:', data.message);
+                        this.addActivity(`❌ Error: ${data.message}`, 'error');
+                        this.onProcessingComplete();
+                    }
+                };
+                
+                this.ws.onclose = () => {
+                    this.isConnected = false;
+                    this.updateConnectionStatus('disconnected');
+                    if (this.isProcessing) {
+                        this.addActivity('🔴 Processing interrupted', 'error');
+                        this.onProcessingComplete();
+                    }
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.addActivity('⚠️ Connection error', 'warning');
+                };
+            }
+
+            updateConnectionStatus(status) {
+                const statusElement = document.getElementById('connectionStatus');
+                statusElement.className = `connection-status ${status}`;
+                
+                switch(status) {
+                    case 'connected':
+                        statusElement.textContent = '🟢 Connected';
+                        break;
+                    case 'disconnected':
+                        statusElement.textContent = '🔴 Disconnected';
+                        break;
+                    case 'reconnecting':
+                        statusElement.textContent = '🟡 Reconnecting...';
+                        break;
+                }
+            }
+
+            displayFrame(frameData, people, frameDimensions) {
+                // Decode base64 frame and display on canvas
+                const img = new Image();
+                img.onload = () => {
+                    this.canvas.width = img.width;
+                    this.canvas.height = img.height;
+                    this.ctx.drawImage(img, 0, 0);
+                    
+                    // Update overlay with person boxes
+                    this.updatePersonBoxes(people, frameDimensions);
+                };
+                img.src = 'data:image/jpeg;base64,' + frameData;
+            }
+
+            updateProgress(progress, currentFrame, totalFrames) {
+                const progressBar = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+                
+                progressBar.style.width = progress + '%';
+                progressText.textContent = `${Math.round(progress)}% (${currentFrame}/${totalFrames})`;
+            }
+
+            onProcessingComplete() {
+                this.isProcessing = false;
+                document.getElementById('processBtn').disabled = false;
+                document.getElementById('processBtn').textContent = '🚀 Process Video';
+                document.getElementById('progressBar').style.display = 'none';
+                this.addActivity('✅ Video processing completed', 'success');
+                this.updateConnectionStatus('disconnected');
+            }
+
+            updateStats(stats) {
+                document.getElementById('currentPeople').textContent = stats.current_people_count;
+                document.getElementById('uniquePeople').textContent = stats.unique_people_seen;
+                document.getElementById('groupsCount').textContent = stats.groups;
+                document.getElementById('fps').textContent = stats.fps.toFixed(1);
+                document.getElementById('uptime').textContent = this.formatTime(stats.uptime);
+                document.getElementById('totalFrames').textContent = stats.total_frames;
+                document.getElementById('avgConfidence').textContent = (stats.avg_confidence * 100).toFixed(0) + '%';
+            }
+
+            updatePersonBoxes(people, frameDimensions) {
+                const overlay = document.getElementById('overlay');
+                const canvas = this.canvas;
+                
+                // Clear existing boxes
+                overlay.innerHTML = '';
+                
+                people.forEach((person, index) => {
+                    const [x1, y1, x2, y2] = person.bbox;
+                    
+                    // Calculate position relative to canvas element
+                    const scaleX = canvas.offsetWidth / frameDimensions.width;
+                    const scaleY = canvas.offsetHeight / frameDimensions.height;
+                    
+                    const box = document.createElement('div');
+                    box.className = 'person-box';
+                    
+                    box.style.left = (x1 * scaleX) + 'px';
+                    box.style.top = (y1 * scaleY) + 'px';
+                    box.style.width = ((x2 - x1) * scaleX) + 'px';
+                    box.style.height = ((y2 - y1) * scaleY) + 'px';
+                    
+                    // Create info label
+                    const info = document.createElement('div');
+                    info.className = 'person-info';
+                    
+                    let infoText = `ID: ${person.id} (${(person.confidence * 100).toFixed(0)}%)`;
+                    if (person.attributes && Object.keys(person.attributes).length > 0) {
+                        const attr = person.attributes;
+                        infoText = `${attr.age || '?'}y ${attr.gender || ''} ${attr.emotion || ''}`;
+                    }
+                    
+                    info.textContent = infoText;
+                    box.appendChild(info);
+                    overlay.appendChild(box);
+                });
+            }
+
+            async handleFileUpload(file) {
+                this.uploadedFile = file;
+                
+                // Show file info
+                const fileInfo = document.getElementById('fileInfo');
+                const fileSize = (file.size / (1024 * 1024)).toFixed(2);
+                fileInfo.innerHTML = `
+                    <strong>📁 ${file.name}</strong><br>
+                    Size: ${fileSize} MB<br>
+                    Type: ${file.type}
+                `;
+                
+                // Show controls
+                document.getElementById('uploadControls').style.display = 'block';
+                
+                this.addActivity(`📁 File uploaded: ${file.name}`, 'info');
+            }
+
+            async processVideo() {
+                if (!this.uploadedFile) {
+                    this.addActivity('❌ No file selected', 'error');
+                    return;
+                }
+                
+                this.isProcessing = true;
+                document.getElementById('processBtn').disabled = true;
+                document.getElementById('processBtn').textContent = '⏳ Processing...';
+                document.getElementById('progressBar').style.display = 'block';
+                
+                // Hide placeholder and show canvas
+                document.getElementById('videoPlaceholder').style.display = 'none';
+                this.canvas.style.display = 'block';
+                
+                // Upload file to server
+                const formData = new FormData();
+                formData.append('video', this.uploadedFile);
+                
+                try {
+                    const response = await fetch('/upload_video', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.addActivity('🚀 Processing started', 'success');
+                        
+                        // Connect to WebSocket for real-time updates
+                        this.initWebSocket();
+                        
+                        // Wait for WebSocket to be ready, then start processing
+                        const startProcessing = () => {
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                console.log('Sending start_processing message:', result.filename);
+                                this.ws.send(JSON.stringify({
+                                    action: 'start_processing',
+                                    filename: result.filename
+                                }));
+                            } else {
+                                console.log('WebSocket not ready, retrying in 100ms');
+                                setTimeout(startProcessing, 100);
+                            }
+                        };
+                        
+                        // Start processing after a small delay to ensure WebSocket is connected
+                        setTimeout(startProcessing, 500);
+                    } else {
+                        throw new Error('Upload failed');
+                    }
+                } catch (error) {
+                    this.addActivity(`❌ Upload failed: ${error.message}`, 'error');
+                    this.onProcessingComplete();
+                }
+            }
+
+            clearUpload() {
+                this.uploadedFile = null;
+                document.getElementById('uploadControls').style.display = 'none';
+                document.getElementById('videoPlaceholder').style.display = 'flex';
+                this.canvas.style.display = 'none';
+                document.getElementById('overlay').innerHTML = '';
+                
+                // Reset stats
+                document.getElementById('currentPeople').textContent = '0';
+                document.getElementById('uniquePeople').textContent = '0';
+                document.getElementById('groupsCount').textContent = '0';
+                document.getElementById('fps').textContent = '0';
+                document.getElementById('uptime').textContent = '0s';
+                document.getElementById('totalFrames').textContent = '0';
+                document.getElementById('avgConfidence').textContent = '0%';
+                
+                this.addActivity('🗑️ Upload cleared', 'info');
+            }
+
+
+
+            addActivity(message, type = 'info') {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString();
+                
+                const activityLog = document.getElementById('activityLog');
+                
+                const activity = document.createElement('div');
+                activity.className = 'activity-item';
+                
+                const icon = document.createElement('div');
+                icon.className = 'activity-icon';
+                icon.textContent = this.getIconForType(type);
+                
+                const text = document.createElement('div');
+                text.className = 'activity-text';
+                text.textContent = message;
+                
+                const time = document.createElement('div');
+                time.className = 'activity-time';
+                time.textContent = timeStr;
+                
+                activity.appendChild(icon);
+                activity.appendChild(text);
+                activity.appendChild(time);
+                
+                // Insert at the beginning
+                activityLog.insertBefore(activity, activityLog.firstChild);
+                
+                // Keep only last 10 activities
+                while (activityLog.children.length > 10) {
+                    activityLog.removeChild(activityLog.lastChild);
+                }
+            }
+
+            getIconForType(type) {
+                const icons = {
+                    success: '✅',
+                    error: '❌',
+                    warning: '⚠️',
+                    info: 'ℹ️'
+                };
+                return icons[type] || 'ℹ️';
+            }
+
+            formatTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = Math.floor(seconds % 60);
+                
+                if (minutes > 0) {
+                    return `${minutes}m ${remainingSeconds}s`;
+                }
+                return `${remainingSeconds}s`;
+            }
+
+            setupEventListeners() {
+                const uploadArea = document.getElementById('uploadArea');
+                const fileInput = document.getElementById('videoFileInput');
+                const processBtn = document.getElementById('processBtn');
+                const clearBtn = document.getElementById('clearBtn');
+                
+                // File upload area events
+                uploadArea.addEventListener('click', () => {
+                    fileInput.click();
+                });
+                
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+                
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+                
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0 && files[0].type.startsWith('video/')) {
+                        this.handleFileUpload(files[0]);
+                    } else {
+                        this.addActivity('❌ Please select a valid video file', 'error');
+                    }
+                });
+                
+                // File input change event
+                fileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        this.handleFileUpload(file);
+                    }
+                });
+                
+                // Button events
+                processBtn.addEventListener('click', () => {
+                    this.processVideo();
+                });
+                
+                clearBtn.addEventListener('click', () => {
+                    this.clearUpload();
+                });
+                
+                // Handle window resize for responsive overlay
+                window.addEventListener('resize', () => {
+                    if (this.canvas && this.canvas.style.display !== 'none') {
+                        // Trigger overlay update if we have recent frame data
+                        const overlay = document.getElementById('overlay');
+                        if (overlay.children.length > 0) {
+                            // Store current overlay data for resize
+                            setTimeout(() => {
+                                // Re-trigger overlay update logic if needed
+                            }, 100);
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new VideoAnalyticsDashboard();
+        });
+    </script>
+</body>
+</html> 
