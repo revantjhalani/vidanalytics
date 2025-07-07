@@ -283,7 +283,7 @@
             border-radius: 8px;
             background: rgba(0, 255, 136, 0.1);
             backdrop-filter: blur(2px);
-            transition: all 0.2s ease-out;
+            transition: left 0.15s ease-out, top 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out, background 0.2s ease-out, transform 0.2s ease-out;
             animation: fadeIn 0.5s ease-out;
         }
 
@@ -312,6 +312,7 @@
             max-width: 200px;
             overflow: hidden;
             text-overflow: ellipsis;
+            transition: opacity 0.2s ease-out;
         }
 
         .group-indicator {
@@ -645,6 +646,7 @@
                 this.isProcessing = false;
                 this.canvas = null;
                 this.ctx = null;
+                this.personBoxes = new Map(); // Track existing person boxes to prevent flickering
                 
                 this.setupEventListeners();
                 this.initCanvas();
@@ -752,6 +754,11 @@
                 document.getElementById('processBtn').disabled = false;
                 document.getElementById('processBtn').textContent = '🚀 Process Video';
                 document.getElementById('progressBar').style.display = 'none';
+                
+                // Clear person boxes tracking for next processing session
+                this.personBoxes.clear();
+                document.getElementById('overlay').innerHTML = '';
+                
                 this.addActivity('✅ Video processing completed', 'success');
                 this.updateConnectionStatus('disconnected');
             }
@@ -770,8 +777,16 @@
                 const overlay = document.getElementById('overlay');
                 const canvas = this.canvas;
                 
-                // Clear existing boxes
-                overlay.innerHTML = '';
+                // Track current person IDs in this frame
+                const currentPersonIds = new Set(people.map(p => p.id));
+                
+                // Remove boxes for people no longer detected
+                for (const [personId, box] of this.personBoxes) {
+                    if (!currentPersonIds.has(personId)) {
+                        overlay.removeChild(box);
+                        this.personBoxes.delete(personId);
+                    }
+                }
                 
                 people.forEach((person, index) => {
                     const [x1, y1, x2, y2] = person.bbox;
@@ -780,30 +795,42 @@
                     const scaleX = canvas.offsetWidth / frameDimensions.width;
                     const scaleY = canvas.offsetHeight / frameDimensions.height;
                     
-                    const box = document.createElement('div');
-                    box.className = 'person-box';
+                    let box = this.personBoxes.get(person.id);
+                    let info;
                     
+                    if (!box) {
+                        // Create new box for new person
+                        box = document.createElement('div');
+                        box.className = 'person-box';
+                        
+                        // Create info label
+                        info = document.createElement('div');
+                        info.className = 'person-info';
+                        box.appendChild(info);
+                        
+                        overlay.appendChild(box);
+                        this.personBoxes.set(person.id, box);
+                    } else {
+                        // Get existing info element
+                        info = box.querySelector('.person-info');
+                    }
+                    
+                    // Update box position and size smoothly
                     box.style.left = (x1 * scaleX) + 'px';
                     box.style.top = (y1 * scaleY) + 'px';
                     box.style.width = ((x2 - x1) * scaleX) + 'px';
                     box.style.height = ((y2 - y1) * scaleY) + 'px';
                     
-                    // Create info label
-                    const info = document.createElement('div');
-                    info.className = 'person-info';
-                    
+                    // Update info text
                     let infoText = `ID: ${person.id} (${(person.confidence * 100).toFixed(0)}%)`;
                     if (person.attributes && Object.keys(person.attributes).length > 0) {
                         const attr = person.attributes;
-                        console.log('Person attributes:', attr);  // Debug log
                         infoText = `${attr.age || '?'}y ${attr.gender || '?'} ${attr.emotion || '?'}`;
-                    } else {
-                        console.log('No attributes for person:', person.id);  // Debug log
                     }
                     
-                    info.textContent = infoText;
-                    box.appendChild(info);
-                    overlay.appendChild(box);
+                    if (info.textContent !== infoText) {
+                        info.textContent = infoText;
+                    }
                 });
             }
 
@@ -888,6 +915,9 @@
                 document.getElementById('videoPlaceholder').style.display = 'flex';
                 this.canvas.style.display = 'none';
                 document.getElementById('overlay').innerHTML = '';
+                
+                // Clear person boxes tracking
+                this.personBoxes.clear();
                 
                 // Reset stats
                 document.getElementById('currentPeople').textContent = '0';
