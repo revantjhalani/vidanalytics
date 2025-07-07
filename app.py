@@ -226,7 +226,7 @@ def cleanup_resources():
 
 # --- VIDEO PROCESSING ---
 frame_analysis_counter = 0
-deepface_skip_frames = 3  # Run DeepFace analysis every 3rd frame for better performance
+deepface_skip_frames = 1  # Run DeepFace analysis every 3rd frame for better performance
 
 def analyze_frame(frame):
     """Analyze a single frame and return detection data"""
