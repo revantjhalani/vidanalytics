@@ -795,7 +795,10 @@
                     let infoText = `ID: ${person.id} (${(person.confidence * 100).toFixed(0)}%)`;
                     if (person.attributes && Object.keys(person.attributes).length > 0) {
                         const attr = person.attributes;
-                        infoText = `${attr.age || '?'}y ${attr.gender || ''} ${attr.emotion || ''}`;
+                        console.log('Person attributes:', attr);  // Debug log
+                        infoText = `${attr.age || '?'}y ${attr.gender || '?'} ${attr.emotion || '?'}`;
+                    } else {
+                        console.log('No attributes for person:', person.id);  // Debug log
                     }
                     
                     info.textContent = infoText;

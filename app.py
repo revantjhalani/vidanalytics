@@ -226,7 +226,7 @@ def cleanup_resources():
 
 # --- VIDEO PROCESSING ---
 frame_analysis_counter = 0
-deepface_skip_frames = 1  # Run DeepFace analysis every 5th frame
+deepface_skip_frames = 3  # Run DeepFace analysis every 3rd frame for better performance
 
 def analyze_frame(frame):
     """Analyze a single frame and return detection data"""
@@ -258,7 +258,7 @@ def analyze_frame(frame):
                     # Run DeepFace analysis less frequently for better performance
                     if frame_analysis_counter % deepface_skip_frames == 0:
                         try:
-                            padding = 30
+                            padding = 20
                             y1_crop = max(0, y1-padding)
                             y2_crop = min(frame.shape[0], y2+padding)
                             x1_crop = max(0, x1-padding)
@@ -266,14 +266,17 @@ def analyze_frame(frame):
                             
                             person_crop = frame[y1_crop:y2_crop, x1_crop:x2_crop]
                             
-                            # Ensure minimum crop size and valid dimensions
+                            print(f"DeepFace: Processing crop size {person_crop.shape if person_crop.size > 0 else 'empty'}")
+                            
+                            # Ensure minimum crop size and valid dimensions (reduced requirements)
                             if (person_crop.size > 0 and 
-                                person_crop.shape[0] > 60 and person_crop.shape[1] > 60 and
+                                person_crop.shape[0] > 48 and person_crop.shape[1] > 48 and
                                 len(person_crop.shape) == 3):
                                 
                                 # Create a copy to avoid memory issues
                                 crop_copy = person_crop.copy()
                                 
+                                print("DeepFace: Running face analysis...")
                                 analysis_results = DeepFace.analyze(
                                     img_path=crop_copy,
                                     actions=['age', 'gender', 'emotion', 'race'],
@@ -281,21 +284,39 @@ def analyze_frame(frame):
                                     silent=True
                                 )
                                 
+                                print(f"DeepFace: Analysis results type: {type(analysis_results)}")
+                                
                                 if isinstance(analysis_results, list) and len(analysis_results) > 0:
                                     face_data = analysis_results[0]
+                                    print(f"DeepFace: Face data keys: {list(face_data.keys())}")
+                                    
                                     detection['attributes'] = {
-                                        'age': round(face_data.get('age', 'Unknown') * 0.7, 1), 
+                                        'age': round(face_data.get('age', 25), 0),  # Fixed: removed incorrect * 0.7
                                         'gender': face_data.get('dominant_gender', 'Unknown').capitalize(),
                                         'emotion': face_data.get('dominant_emotion', 'Unknown').capitalize(),
                                         'race': face_data.get('dominant_race', 'Unknown').capitalize()
                                     }
+                                    print(f"DeepFace: Attributes extracted: {detection['attributes']}")
+                                elif isinstance(analysis_results, dict):
+                                    # Handle case where result is directly a dict
+                                    detection['attributes'] = {
+                                        'age': round(analysis_results.get('age', 25), 0),
+                                        'gender': analysis_results.get('dominant_gender', 'Unknown').capitalize(),
+                                        'emotion': analysis_results.get('dominant_emotion', 'Unknown').capitalize(),
+                                        'race': analysis_results.get('dominant_race', 'Unknown').capitalize()
+                                    }
+                                    print(f"DeepFace: Attributes extracted (dict): {detection['attributes']}")
+                                else:
+                                    print(f"DeepFace: Unexpected result format: {type(analysis_results)}")
                                 
                                 # Explicitly delete the crop copy
                                 del crop_copy
+                            else:
+                                print(f"DeepFace: Crop too small or invalid: {person_crop.shape if person_crop.size > 0 else 'empty'}")
                         
                         except Exception as e:
-                            # Skip if face analysis fails
-                            pass
+                            print(f"DeepFace analysis error: {e}")
+                            # Continue with detection without attributes
                     
                     detections.append(detection)
                     
