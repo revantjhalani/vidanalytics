@@ -1195,11 +1195,16 @@
                 const scaleX = videoRect.width / frameDimensions.width;
                 const scaleY = videoRect.height / frameDimensions.height;
                 
-                // Update canvas to match video size
+                // Update canvas to match video size and draw video frame
                 this.canvas.width = videoRect.width;
                 this.canvas.height = videoRect.height;
                 this.canvas.style.width = videoRect.width + 'px';
                 this.canvas.style.height = videoRect.height + 'px';
+                
+                // Draw the current video frame to canvas
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                    this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+                }
                 
                 // Clear existing overlays
                 const currentBoxIds = new Set(people.map(p => p.id));
