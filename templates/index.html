@@ -690,6 +690,12 @@
                 this.webcamProcessingInterval = null;
                 this.currentMode = 'file'; // 'file' or 'webcam'
                 
+                // Frontend performance optimization
+                this.lastFrameUpdate = 0;
+                this.frameUpdateThrottle = 100; // Max 10 FPS for UI updates
+                this.isUpdatingFrame = false;
+                this.pendingFrameData = null;
+                
                 this.setupEventListeners();
                 this.initCanvas();
             }
@@ -1098,9 +1104,14 @@
                 const videoPlaceholder = document.getElementById('videoPlaceholder');
                 if (videoPlaceholder) videoPlaceholder.style.display = 'flex';
                 
-                // Clear overlays
+                // Clear overlays and reset state
                 document.getElementById('overlay').innerHTML = '';
                 this.personBoxes.clear();
+                
+                // Reset performance optimization state
+                this.lastFrameUpdate = 0;
+                this.isUpdatingFrame = false;
+                this.pendingFrameData = null;
                 
                 this.addActivity('⏹️ Webcam stopped', 'info');
             }
@@ -1124,8 +1135,16 @@
                     const data = JSON.parse(event.data);
                     
                     if (data.type === 'webcam_analysis') {
+                        // Always update stats immediately (lightweight)
                         this.updateStats(data.stats);
-                        this.updateWebcamOverlay(data.people, data.frame_dimensions);
+                        
+                        // Throttle frame updates to prevent UI lag
+                        this.pendingFrameData = {
+                            people: data.people,
+                            frameDimensions: data.frame_dimensions
+                        };
+                        
+                        this.scheduleFrameUpdate();
                     } else if (data.type === 'error') {
                         console.error('Webcam processing error:', data.message);
                         this.addActivity(`❌ Analysis error: ${data.message}`, 'error');
@@ -1141,6 +1160,26 @@
                 };
             }
             
+            scheduleFrameUpdate() {
+                if (this.isUpdatingFrame) {
+                    return; // Skip if already updating
+                }
+                
+                const now = Date.now();
+                if (now - this.lastFrameUpdate < this.frameUpdateThrottle) {
+                    return; // Throttle updates
+                }
+                
+                this.isUpdatingFrame = true;
+                requestAnimationFrame(() => {
+                    if (this.pendingFrameData && this.isWebcamActive) {
+                        this.updateWebcamOverlay(this.pendingFrameData.people, this.pendingFrameData.frameDimensions);
+                        this.lastFrameUpdate = Date.now();
+                    }
+                    this.isUpdatingFrame = false;
+                });
+            }
+            
             startWebcamProcessing() {
                 if (this.webcamProcessingInterval) {
                     clearInterval(this.webcamProcessingInterval);
@@ -1150,7 +1189,7 @@
                     if (this.isWebcamActive && this.webcamVideo && this.webcamWs && this.webcamWs.readyState === WebSocket.OPEN) {
                         this.captureAndSendFrame();
                     }
-                }, 100); // Process at ~10 FPS to avoid overwhelming the server
+                }, 200); // Reduced to ~5 FPS for frame capture to reduce load
             }
             
             captureAndSendFrame() {
@@ -1195,29 +1234,43 @@
                 const scaleX = videoRect.width / frameDimensions.width;
                 const scaleY = videoRect.height / frameDimensions.height;
                 
-                // Update canvas to match video size and draw video frame
-                this.canvas.width = videoRect.width;
-                this.canvas.height = videoRect.height;
-                this.canvas.style.width = videoRect.width + 'px';
-                this.canvas.style.height = videoRect.height + 'px';
+                // Only resize canvas if dimensions changed (expensive operation)
+                if (this.canvas.width !== videoRect.width || this.canvas.height !== videoRect.height) {
+                    this.canvas.width = videoRect.width;
+                    this.canvas.height = videoRect.height;
+                    this.canvas.style.width = videoRect.width + 'px';
+                    this.canvas.style.height = videoRect.height + 'px';
+                }
                 
-                // Draw the current video frame to canvas
-                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                // Draw the current video frame to canvas (only if video is ready)
+                if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState === video.HAVE_ENOUGH_DATA) {
+                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
                     this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
                 }
                 
-                // Clear existing overlays
+                // Batch DOM operations for better performance
                 const currentBoxIds = new Set(people.map(p => p.id));
+                const elementsToRemove = [];
                 
-                // Remove boxes for people no longer detected
+                // Collect boxes to remove (don't remove immediately to avoid layout thrashing)
                 for (const [personId, box] of this.personBoxes.entries()) {
                     if (!currentBoxIds.has(personId)) {
-                        if (box.parentNode) {
-                            box.parentNode.removeChild(box);
-                        }
-                        this.personBoxes.delete(personId);
+                        elementsToRemove.push(personId);
                     }
                 }
+                
+                // Remove boxes in batch
+                elementsToRemove.forEach(personId => {
+                    const box = this.personBoxes.get(personId);
+                    if (box && box.parentNode) {
+                        box.parentNode.removeChild(box);
+                    }
+                    this.personBoxes.delete(personId);
+                });
+                
+                // Use document fragment for new elements to reduce reflows
+                const fragment = document.createDocumentFragment();
+                const newBoxes = [];
                 
                 // Update or create boxes for current people
                 people.forEach(person => {
@@ -1235,20 +1288,31 @@
                         info.className = 'person-info';
                         box.appendChild(info);
                         
-                        overlay.appendChild(box);
-                        this.personBoxes.set(person.id, box);
+                        fragment.appendChild(box);
+                        newBoxes.push({ box, personId: person.id });
                     } else {
                         // Get existing info element
                         info = box.querySelector('.person-info');
                     }
                     
-                    // Update box position and size smoothly
-                    box.style.left = (x1 * scaleX) + 'px';
-                    box.style.top = (y1 * scaleY) + 'px';
-                    box.style.width = ((x2 - x1) * scaleX) + 'px';
-                    box.style.height = ((y2 - y1) * scaleY) + 'px';
+                    // Use transform instead of changing left/top for better performance
+                    const left = x1 * scaleX;
+                    const top = y1 * scaleY;
+                    const width = (x2 - x1) * scaleX;
+                    const height = (y2 - y1) * scaleY;
                     
-                    // Update info text
+                    // Only update if position changed significantly (avoid micro-movements)
+                    const currentLeft = parseFloat(box.style.left) || 0;
+                    const currentTop = parseFloat(box.style.top) || 0;
+                    
+                    if (Math.abs(left - currentLeft) > 2 || Math.abs(top - currentTop) > 2) {
+                        box.style.left = left + 'px';
+                        box.style.top = top + 'px';
+                        box.style.width = width + 'px';
+                        box.style.height = height + 'px';
+                    }
+                    
+                    // Update info text only if changed
                     let infoText = `ID: ${person.id} (${(person.confidence * 100).toFixed(0)}%)`;
                     if (person.attributes && Object.keys(person.attributes).length > 0) {
                         const attr = person.attributes;
@@ -1259,6 +1323,14 @@
                         info.textContent = infoText;
                     }
                 });
+                
+                // Add new boxes in batch
+                if (fragment.hasChildNodes()) {
+                    overlay.appendChild(fragment);
+                    newBoxes.forEach(({ box, personId }) => {
+                        this.personBoxes.set(personId, box);
+                    });
+                }
             }
 
 
