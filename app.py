@@ -418,6 +418,74 @@ async def websocket_process_video(websocket: WebSocket):
         except:
             pass
 
+@app.websocket("/ws/webcam")
+async def websocket_webcam_process(websocket: WebSocket):
+    """Handle webcam real-time processing via WebSocket"""
+    await websocket.accept()
+    print("Webcam WebSocket connection accepted")
+    
+    # Reset tracker for fresh start
+    tracker.reset()
+    
+    try:
+        while True:
+            # Wait for frame data from frontend
+            message = await websocket.receive_text()
+            data = json.loads(message)
+            
+            if data.get('action') == 'webcam_frame':
+                frame_data = data.get('frame')
+                if frame_data:
+                    try:
+                        # Decode base64 frame
+                        frame_bytes = base64.b64decode(frame_data.split(',')[1] if ',' in frame_data else frame_data)
+                        nparr = np.frombuffer(frame_bytes, np.uint8)
+                        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        
+                        if frame is not None:
+                            # Process the frame
+                            detections = analyze_frame(frame)
+                            
+                            # Update tracker
+                            people_data, stats = tracker.update(detections)
+                            
+                            # Send results back
+                            response_data = {
+                                'type': 'webcam_analysis',
+                                'people': people_data,
+                                'stats': stats,
+                                'frame_dimensions': {'width': frame.shape[1], 'height': frame.shape[0]}
+                            }
+                            
+                            await websocket.send_text(json.dumps(response_data))
+                        
+                    except Exception as e:
+                        print(f"Webcam frame processing error: {e}")
+                        await websocket.send_text(json.dumps({
+                            'type': 'error',
+                            'message': f'Frame processing error: {str(e)}'
+                        }))
+            
+            elif data.get('action') == 'stop_webcam':
+                print("Stopping webcam processing")
+                break
+                
+    except Exception as e:
+        print(f"Webcam WebSocket error: {e}")
+        try:
+            await websocket.send_text(json.dumps({
+                'type': 'error',
+                'message': f'Webcam processing error: {str(e)}'
+            }))
+        except:
+            pass
+    finally:
+        print("Webcam WebSocket connection closing")
+        try:
+            await websocket.close()
+        except:
+            pass
+
 async def process_video_file(websocket: WebSocket, video_path: str):
     """Process uploaded video file and send frames via WebSocket"""
     global processing_active

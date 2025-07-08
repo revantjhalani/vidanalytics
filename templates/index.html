@@ -536,25 +536,59 @@
         <div class="main-content">
             <!-- Video Upload Section -->
             <div class="upload-section">
-                <h2 style="margin-bottom: 20px; color: #4ecdc4;">📁 Upload Video</h2>
-                <div class="upload-container">
-                    <div class="upload-area" id="uploadArea">
-                        <div class="upload-icon">📹</div>
-                        <div class="upload-text">
-                            <h3>Drop video file here or click to browse</h3>
-                            <p>Supports MP4, AVI, MOV files (max 100MB)</p>
+                <h2 style="margin-bottom: 20px; color: #4ecdc4;">📁 Video Source</h2>
+                
+                <!-- Mode Toggle -->
+                <div class="mode-toggle" style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px;">
+                    <button id="fileModeBtn" class="mode-btn btn btn-primary" style="border-radius: 15px;">📁 File Upload</button>
+                    <button id="webcamModeBtn" class="mode-btn btn btn-secondary" style="border-radius: 15px;">📹 Webcam</button>
+                </div>
+                
+                <!-- File Upload Mode -->
+                <div id="fileUploadMode" class="upload-mode">
+                    <div class="upload-container">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">📹</div>
+                            <div class="upload-text">
+                                <h3>Drop video file here or click to browse</h3>
+                                <p>Supports MP4, AVI, MOV files (max 100MB)</p>
+                            </div>
+                            <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
                         </div>
-                        <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+                        <div class="upload-controls" id="uploadControls" style="display: none;">
+                            <div class="file-info" id="fileInfo"></div>
+                            <div class="control-buttons">
+                                <button id="processBtn" class="btn btn-primary">🚀 Process Video</button>
+                                <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
+                            </div>
+                            <div class="progress-bar" id="progressBar" style="display: none;">
+                                <div class="progress-fill" id="progressFill"></div>
+                                <div class="progress-text" id="progressText">0%</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="upload-controls" id="uploadControls" style="display: none;">
-                        <div class="file-info" id="fileInfo"></div>
-                        <div class="control-buttons">
-                            <button id="processBtn" class="btn btn-primary">🚀 Process Video</button>
-                            <button id="clearBtn" class="btn btn-secondary">🗑️ Clear</button>
+                </div>
+                
+                <!-- Webcam Mode -->
+                <div id="webcamMode" class="upload-mode" style="display: none;">
+                    <div class="webcam-container" style="max-width: 600px; margin: 0 auto;">
+                        <div class="webcam-preview" style="margin-bottom: 20px;">
+                            <video id="webcamVideo" autoplay playsinline muted style="width: 100%; max-height: 300px; border-radius: 15px; display: none; background: #000;"></video>
+                            <div id="webcamPlaceholder" style="width: 100%; height: 200px; background: rgba(255, 255, 255, 0.05); border-radius: 15px; display: flex; align-items: center; justify-content: center; border: 2px dashed rgba(255, 255, 255, 0.2);">
+                                <div style="text-align: center; color: #b0b0b0;">
+                                    <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">📹</div>
+                                    <h3 style="margin-bottom: 10px; color: #4ecdc4;">Ready to start webcam</h3>
+                                    <p>Click "Start Webcam" to begin real-time analysis</p>
+                                </div>
+                            </div>
                         </div>
-                        <div class="progress-bar" id="progressBar" style="display: none;">
-                            <div class="progress-fill" id="progressFill"></div>
-                            <div class="progress-text" id="progressText">0%</div>
+                        
+                        <div class="webcam-controls" style="text-align: center;">
+                            <div class="control-buttons">
+                                <button id="startWebcamBtn" class="btn btn-primary">📹 Start Webcam</button>
+                                <button id="stopWebcamBtn" class="btn btn-secondary" style="display: none;">⏹️ Stop Webcam</button>
+                            </div>
+                            <div id="webcamStatus" style="margin-top: 10px; font-size: 0.9rem; color: #888;"></div>
                         </div>
                     </div>
                 </div>
@@ -637,6 +671,7 @@
         class VideoAnalyticsDashboard {
             constructor() {
                 this.ws = null;
+                this.webcamWs = null;
                 this.isConnected = false;
                 this.frameData = null;
                 this.activityLog = [];
@@ -647,6 +682,13 @@
                 this.canvas = null;
                 this.ctx = null;
                 this.personBoxes = new Map(); // Track existing person boxes to prevent flickering
+                
+                // Webcam properties
+                this.webcamStream = null;
+                this.webcamVideo = null;
+                this.isWebcamActive = false;
+                this.webcamProcessingInterval = null;
+                this.currentMode = 'file'; // 'file' or 'webcam'
                 
                 this.setupEventListeners();
                 this.initCanvas();
@@ -931,6 +973,289 @@
                 this.addActivity('🗑️ Upload cleared', 'info');
             }
 
+            // === WEBCAM FUNCTIONALITY ===
+            
+            switchMode(mode) {
+                this.currentMode = mode;
+                
+                // Stop any active processing
+                this.stopWebcam();
+                this.clearUpload();
+                
+                // Update UI
+                const fileModeBtn = document.getElementById('fileModeBtn');
+                const webcamModeBtn = document.getElementById('webcamModeBtn');
+                const fileUploadMode = document.getElementById('fileUploadMode');
+                const webcamMode = document.getElementById('webcamMode');
+                
+                if (mode === 'file') {
+                    fileModeBtn.className = 'mode-btn btn btn-primary';
+                    webcamModeBtn.className = 'mode-btn btn btn-secondary';
+                    fileUploadMode.style.display = 'block';
+                    webcamMode.style.display = 'none';
+                    this.addActivity('📁 Switched to file upload mode', 'info');
+                } else {
+                    fileModeBtn.className = 'mode-btn btn btn-secondary';
+                    webcamModeBtn.className = 'mode-btn btn btn-primary';
+                    fileUploadMode.style.display = 'none';
+                    webcamMode.style.display = 'block';
+                    this.addActivity('📹 Switched to webcam mode', 'info');
+                }
+            }
+            
+            async startWebcam() {
+                try {
+                    this.webcamVideo = document.getElementById('webcamVideo');
+                    const placeholder = document.getElementById('webcamPlaceholder');
+                    const status = document.getElementById('webcamStatus');
+                    const startBtn = document.getElementById('startWebcamBtn');
+                    const stopBtn = document.getElementById('stopWebcamBtn');
+                    
+                    status.textContent = 'Requesting camera access...';
+                    status.style.color = '#ffb347';
+                    
+                    // Request webcam access
+                    this.webcamStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        } 
+                    });
+                    
+                    this.webcamVideo.srcObject = this.webcamStream;
+                    
+                    // Show video, hide placeholder
+                    placeholder.style.display = 'none';
+                    this.webcamVideo.style.display = 'block';
+                    
+                    // Update controls
+                    startBtn.style.display = 'none';
+                    stopBtn.style.display = 'inline-block';
+                    status.textContent = 'Webcam active - Starting analysis...';
+                    status.style.color = '#00ff88';
+                    
+                    this.isWebcamActive = true;
+                    
+                    // Show canvas for overlay
+                    document.getElementById('videoPlaceholder').style.display = 'none';
+                    this.canvas.style.display = 'block';
+                    
+                    // Connect to webcam WebSocket
+                    this.initWebcamWebSocket();
+                    
+                    // Start frame processing
+                    this.startWebcamProcessing();
+                    
+                    this.addActivity('📹 Webcam started successfully', 'success');
+                    
+                } catch (error) {
+                    console.error('Error starting webcam:', error);
+                    const status = document.getElementById('webcamStatus');
+                    status.textContent = 'Camera access denied or unavailable';
+                    status.style.color = '#ff6b6b';
+                    this.addActivity(`❌ Webcam error: ${error.message}`, 'error');
+                }
+            }
+            
+            stopWebcam() {
+                if (this.webcamStream) {
+                    this.webcamStream.getTracks().forEach(track => track.stop());
+                    this.webcamStream = null;
+                }
+                
+                if (this.webcamProcessingInterval) {
+                    clearInterval(this.webcamProcessingInterval);
+                    this.webcamProcessingInterval = null;
+                }
+                
+                if (this.webcamWs) {
+                    this.webcamWs.send(JSON.stringify({ action: 'stop_webcam' }));
+                    this.webcamWs.close();
+                    this.webcamWs = null;
+                }
+                
+                this.isWebcamActive = false;
+                
+                // Reset UI
+                const webcamVideo = document.getElementById('webcamVideo');
+                const placeholder = document.getElementById('webcamPlaceholder');
+                const status = document.getElementById('webcamStatus');
+                const startBtn = document.getElementById('startWebcamBtn');
+                const stopBtn = document.getElementById('stopWebcamBtn');
+                
+                if (webcamVideo) webcamVideo.style.display = 'none';
+                if (placeholder) placeholder.style.display = 'flex';
+                if (status) {
+                    status.textContent = '';
+                    status.style.color = '#888';
+                }
+                if (startBtn) startBtn.style.display = 'inline-block';
+                if (stopBtn) stopBtn.style.display = 'none';
+                
+                // Hide canvas and show placeholder
+                if (this.canvas) this.canvas.style.display = 'none';
+                const videoPlaceholder = document.getElementById('videoPlaceholder');
+                if (videoPlaceholder) videoPlaceholder.style.display = 'flex';
+                
+                // Clear overlays
+                document.getElementById('overlay').innerHTML = '';
+                this.personBoxes.clear();
+                
+                this.addActivity('⏹️ Webcam stopped', 'info');
+            }
+            
+            initWebcamWebSocket() {
+                if (this.webcamWs) {
+                    this.webcamWs.close();
+                }
+                
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws/webcam`;
+                
+                this.webcamWs = new WebSocket(wsUrl);
+                
+                this.webcamWs.onopen = () => {
+                    console.log('Webcam WebSocket connected');
+                    this.addActivity('🟢 Connected to webcam analysis', 'success');
+                };
+                
+                this.webcamWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'webcam_analysis') {
+                        this.updateStats(data.stats);
+                        this.updateWebcamOverlay(data.people, data.frame_dimensions);
+                    } else if (data.type === 'error') {
+                        console.error('Webcam processing error:', data.message);
+                        this.addActivity(`❌ Analysis error: ${data.message}`, 'error');
+                    }
+                };
+                
+                this.webcamWs.onclose = () => {
+                    console.log('Webcam WebSocket disconnected');
+                };
+                
+                this.webcamWs.onerror = (error) => {
+                    console.error('Webcam WebSocket error:', error);
+                };
+            }
+            
+            startWebcamProcessing() {
+                if (this.webcamProcessingInterval) {
+                    clearInterval(this.webcamProcessingInterval);
+                }
+                
+                this.webcamProcessingInterval = setInterval(() => {
+                    if (this.isWebcamActive && this.webcamVideo && this.webcamWs && this.webcamWs.readyState === WebSocket.OPEN) {
+                        this.captureAndSendFrame();
+                    }
+                }, 100); // Process at ~10 FPS to avoid overwhelming the server
+            }
+            
+            captureAndSendFrame() {
+                try {
+                    const video = this.webcamVideo;
+                    if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                        return;
+                    }
+                    
+                    // Create temporary canvas for frame capture
+                    const captureCanvas = document.createElement('canvas');
+                    const captureCtx = captureCanvas.getContext('2d');
+                    
+                    captureCanvas.width = video.videoWidth;
+                    captureCanvas.height = video.videoHeight;
+                    
+                    // Draw video frame to canvas
+                    captureCtx.drawImage(video, 0, 0);
+                    
+                    // Convert to base64
+                    const frameData = captureCanvas.toDataURL('image/jpeg', 0.7);
+                    
+                    // Send frame to backend
+                    this.webcamWs.send(JSON.stringify({
+                        action: 'webcam_frame',
+                        frame: frameData
+                    }));
+                    
+                } catch (error) {
+                    console.error('Error capturing frame:', error);
+                }
+            }
+            
+            updateWebcamOverlay(people, frameDimensions) {
+                if (!this.webcamVideo || !people) return;
+                
+                const video = this.webcamVideo;
+                const overlay = document.getElementById('overlay');
+                
+                // Calculate scaling factors
+                const videoRect = video.getBoundingClientRect();
+                const scaleX = videoRect.width / frameDimensions.width;
+                const scaleY = videoRect.height / frameDimensions.height;
+                
+                // Update canvas to match video size
+                this.canvas.width = videoRect.width;
+                this.canvas.height = videoRect.height;
+                this.canvas.style.width = videoRect.width + 'px';
+                this.canvas.style.height = videoRect.height + 'px';
+                
+                // Clear existing overlays
+                const currentBoxIds = new Set(people.map(p => p.id));
+                
+                // Remove boxes for people no longer detected
+                for (const [personId, box] of this.personBoxes.entries()) {
+                    if (!currentBoxIds.has(personId)) {
+                        if (box.parentNode) {
+                            box.parentNode.removeChild(box);
+                        }
+                        this.personBoxes.delete(personId);
+                    }
+                }
+                
+                // Update or create boxes for current people
+                people.forEach(person => {
+                    const [x1, y1, x2, y2] = person.bbox;
+                    let box = this.personBoxes.get(person.id);
+                    let info;
+                    
+                    if (!box) {
+                        // Create new box for new person
+                        box = document.createElement('div');
+                        box.className = 'person-box';
+                        
+                        // Create info label
+                        info = document.createElement('div');
+                        info.className = 'person-info';
+                        box.appendChild(info);
+                        
+                        overlay.appendChild(box);
+                        this.personBoxes.set(person.id, box);
+                    } else {
+                        // Get existing info element
+                        info = box.querySelector('.person-info');
+                    }
+                    
+                    // Update box position and size smoothly
+                    box.style.left = (x1 * scaleX) + 'px';
+                    box.style.top = (y1 * scaleY) + 'px';
+                    box.style.width = ((x2 - x1) * scaleX) + 'px';
+                    box.style.height = ((y2 - y1) * scaleY) + 'px';
+                    
+                    // Update info text
+                    let infoText = `ID: ${person.id} (${(person.confidence * 100).toFixed(0)}%)`;
+                    if (person.attributes && Object.keys(person.attributes).length > 0) {
+                        const attr = person.attributes;
+                        infoText = `${attr.age || '?'}y ${attr.gender || '?'} ${attr.emotion || '?'}`;
+                    }
+                    
+                    if (info.textContent !== infoText) {
+                        info.textContent = infoText;
+                    }
+                });
+            }
+
 
 
             addActivity(message, type = 'info') {
@@ -993,6 +1318,30 @@
                 const processBtn = document.getElementById('processBtn');
                 const clearBtn = document.getElementById('clearBtn');
                 
+                // Mode toggle buttons
+                const fileModeBtn = document.getElementById('fileModeBtn');
+                const webcamModeBtn = document.getElementById('webcamModeBtn');
+                const startWebcamBtn = document.getElementById('startWebcamBtn');
+                const stopWebcamBtn = document.getElementById('stopWebcamBtn');
+                
+                // Mode switching
+                fileModeBtn.addEventListener('click', () => {
+                    this.switchMode('file');
+                });
+                
+                webcamModeBtn.addEventListener('click', () => {
+                    this.switchMode('webcam');
+                });
+                
+                // Webcam controls
+                startWebcamBtn.addEventListener('click', () => {
+                    this.startWebcam();
+                });
+                
+                stopWebcamBtn.addEventListener('click', () => {
+                    this.stopWebcam();
+                });
+                
                 // File upload area events
                 uploadArea.addEventListener('click', () => {
                     fileInput.click();
@@ -1048,6 +1397,11 @@
                             }, 100);
                         }
                     }
+                });
+                
+                // Clean up on page unload
+                window.addEventListener('beforeunload', () => {
+                    this.stopWebcam();
                 });
             }
         }
