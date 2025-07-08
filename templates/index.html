@@ -596,7 +596,7 @@
 
             <div class="video-section">
                 <h2 style="margin-bottom: 20px; color: #4ecdc4;">📹 Video Analysis</h2>
-                <div class="video-container">
+                <div class="video-container" style="position: relative;">
                     <div id="videoPlaceholder" class="video-placeholder">
                         <div class="placeholder-content">
                             <div class="placeholder-icon">🎬</div>
@@ -605,6 +605,7 @@
                         </div>
                     </div>
                     <canvas id="videoCanvas" class="video-feed" style="display: none;"></canvas>
+                    <video id="webcamAnalysisVideo" class="video-feed" style="display: none;" autoplay playsinline muted></video>
                     <div id="overlay" class="overlay"></div>
                 </div>
             </div>
@@ -692,9 +693,11 @@
                 
                 // Frontend performance optimization
                 this.lastFrameUpdate = 0;
-                this.frameUpdateThrottle = 100; // Max 10 FPS for UI updates
+                this.frameUpdateThrottle = 200; // Max 5 FPS for UI updates
                 this.isUpdatingFrame = false;
                 this.pendingFrameData = null;
+                this.renderLoop = null;
+                this.lastPeopleData = null;
                 
                 this.setupEventListeners();
                 this.initCanvas();
@@ -1031,6 +1034,10 @@
                     
                     this.webcamVideo.srcObject = this.webcamStream;
                     
+                    // Also set up analysis video element
+                    const analysisVideo = document.getElementById('webcamAnalysisVideo');
+                    analysisVideo.srcObject = this.webcamStream;
+                    
                     // Show video, hide placeholder
                     placeholder.style.display = 'none';
                     this.webcamVideo.style.display = 'block';
@@ -1043,15 +1050,17 @@
                     
                     this.isWebcamActive = true;
                     
-                    // Show canvas for overlay
+                    // Show analysis video, hide placeholder and canvas
                     document.getElementById('videoPlaceholder').style.display = 'none';
-                    this.canvas.style.display = 'block';
+                    this.canvas.style.display = 'none';
+                    analysisVideo.style.display = 'block';
                     
                     // Connect to webcam WebSocket
                     this.initWebcamWebSocket();
                     
-                    // Start frame processing
+                    // Start frame processing and rendering
                     this.startWebcamProcessing();
+                    this.startRenderLoop();
                     
                     this.addActivity('📹 Webcam started successfully', 'success');
                     
@@ -1075,6 +1084,9 @@
                     this.webcamProcessingInterval = null;
                 }
                 
+                // Stop render loop
+                this.stopRenderLoop();
+                
                 if (this.webcamWs) {
                     this.webcamWs.send(JSON.stringify({ action: 'stop_webcam' }));
                     this.webcamWs.close();
@@ -1085,12 +1097,14 @@
                 
                 // Reset UI
                 const webcamVideo = document.getElementById('webcamVideo');
+                const analysisVideo = document.getElementById('webcamAnalysisVideo');
                 const placeholder = document.getElementById('webcamPlaceholder');
                 const status = document.getElementById('webcamStatus');
                 const startBtn = document.getElementById('startWebcamBtn');
                 const stopBtn = document.getElementById('stopWebcamBtn');
                 
                 if (webcamVideo) webcamVideo.style.display = 'none';
+                if (analysisVideo) analysisVideo.style.display = 'none';
                 if (placeholder) placeholder.style.display = 'flex';
                 if (status) {
                     status.textContent = '';
@@ -1105,13 +1119,20 @@
                 if (videoPlaceholder) videoPlaceholder.style.display = 'flex';
                 
                 // Clear overlays and reset state
-                document.getElementById('overlay').innerHTML = '';
+                const overlay = document.getElementById('overlay');
+                overlay.innerHTML = '';
+                overlay.style.position = '';
+                overlay.style.top = '';
+                overlay.style.left = '';
+                overlay.style.width = '';
+                overlay.style.height = '';
                 this.personBoxes.clear();
                 
                 // Reset performance optimization state
                 this.lastFrameUpdate = 0;
                 this.isUpdatingFrame = false;
                 this.pendingFrameData = null;
+                this.lastPeopleData = null;
                 
                 this.addActivity('⏹️ Webcam stopped', 'info');
             }
@@ -1138,13 +1159,11 @@
                         // Always update stats immediately (lightweight)
                         this.updateStats(data.stats);
                         
-                        // Throttle frame updates to prevent UI lag
-                        this.pendingFrameData = {
+                        // Store latest people data (don't render immediately)
+                        this.lastPeopleData = {
                             people: data.people,
                             frameDimensions: data.frame_dimensions
                         };
-                        
-                        this.scheduleFrameUpdate();
                     } else if (data.type === 'error') {
                         console.error('Webcam processing error:', data.message);
                         this.addActivity(`❌ Analysis error: ${data.message}`, 'error');
@@ -1160,24 +1179,24 @@
                 };
             }
             
-            scheduleFrameUpdate() {
-                if (this.isUpdatingFrame) {
-                    return; // Skip if already updating
+            startRenderLoop() {
+                if (this.renderLoop) {
+                    clearInterval(this.renderLoop);
                 }
                 
-                const now = Date.now();
-                if (now - this.lastFrameUpdate < this.frameUpdateThrottle) {
-                    return; // Throttle updates
-                }
-                
-                this.isUpdatingFrame = true;
-                requestAnimationFrame(() => {
-                    if (this.pendingFrameData && this.isWebcamActive) {
-                        this.updateWebcamOverlay(this.pendingFrameData.people, this.pendingFrameData.frameDimensions);
-                        this.lastFrameUpdate = Date.now();
+                // Independent render loop at 5 FPS for overlays only
+                this.renderLoop = setInterval(() => {
+                    if (this.isWebcamActive && this.lastPeopleData) {
+                        this.updateWebcamOverlay(this.lastPeopleData.people, this.lastPeopleData.frameDimensions);
                     }
-                    this.isUpdatingFrame = false;
-                });
+                }, 200); // 5 FPS for overlay updates
+            }
+            
+            stopRenderLoop() {
+                if (this.renderLoop) {
+                    clearInterval(this.renderLoop);
+                    this.renderLoop = null;
+                }
             }
             
             startWebcamProcessing() {
@@ -1189,7 +1208,7 @@
                     if (this.isWebcamActive && this.webcamVideo && this.webcamWs && this.webcamWs.readyState === WebSocket.OPEN) {
                         this.captureAndSendFrame();
                     }
-                }, 200); // Reduced to ~5 FPS for frame capture to reduce load
+                }, 300); // Reduced to ~3 FPS for frame capture to reduce load
             }
             
             captureAndSendFrame() {
@@ -1226,27 +1245,23 @@
             updateWebcamOverlay(people, frameDimensions) {
                 if (!this.webcamVideo || !people) return;
                 
-                const video = this.webcamVideo;
+                // Use the analysis video element for overlay positioning
+                const video = document.getElementById('webcamAnalysisVideo');
                 const overlay = document.getElementById('overlay');
                 
-                // Calculate scaling factors
+                if (!video || video.style.display === 'none') return;
+                
+                // Calculate scaling factors based on video element size
                 const videoRect = video.getBoundingClientRect();
                 const scaleX = videoRect.width / frameDimensions.width;
                 const scaleY = videoRect.height / frameDimensions.height;
                 
-                // Only resize canvas if dimensions changed (expensive operation)
-                if (this.canvas.width !== videoRect.width || this.canvas.height !== videoRect.height) {
-                    this.canvas.width = videoRect.width;
-                    this.canvas.height = videoRect.height;
-                    this.canvas.style.width = videoRect.width + 'px';
-                    this.canvas.style.height = videoRect.height + 'px';
-                }
-                
-                // Draw the current video frame to canvas (only if video is ready)
-                if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState === video.HAVE_ENOUGH_DATA) {
-                    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-                    this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
-                }
+                // Position overlay to match video element (no canvas operations)
+                overlay.style.position = 'absolute';
+                overlay.style.top = '0px';
+                overlay.style.left = '0px';
+                overlay.style.width = videoRect.width + 'px';
+                overlay.style.height = videoRect.height + 'px';
                 
                 // Batch DOM operations for better performance
                 const currentBoxIds = new Set(people.map(p => p.id));
